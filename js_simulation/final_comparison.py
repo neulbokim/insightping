@@ -206,11 +206,32 @@ def create_summary_table(all_results):
 def create_comprehensive_visualization(all_results, df):
     """종합 시각화"""
     
-    fig = plt.figure(figsize=(24, 22))  # Height increased
-    gs = fig.add_gridspec(6, 5, hspace=0.4, wspace=0.3)  # 6 rows now
+    # ===== 한글 폰트 완전 설정 =====
+    import matplotlib.font_manager as fm
+    
+    # 1. 폰트 찾기
+    font_list = [f.name for f in fm.fontManager.ttflist]
+    
+    if 'Malgun Gothic' in font_list:
+        font_name = 'Malgun Gothic'
+    elif 'NanumGothic' in font_list:
+        font_name = 'NanumGothic'
+    elif 'AppleGothic' in font_list:  # Mac
+        font_name = 'AppleGothic'
+    else:
+        font_name = 'DejaVu Sans'
+    
+    # 2. 폰트 전역 설정
+    plt.rcParams['font.family'] = font_name
+    plt.rcParams['axes.unicode_minus'] = False
+    plt.rcParams['font.size'] = 10
+    
+    # 3. Figure 크기 최적화
+    fig = plt.figure(figsize=(35, 28), dpi=100)  # 더 크게
+    gs = fig.add_gridspec(6, 5, hspace=0.6, wspace=0.4)  # 간격 더 증가
     
     # ===== Row 1: Financial Institution VaR95 Heatmap =====
-    ax1 = fig.add_subplot(gs[0, :2])
+    ax1 = fig.add_subplot(gs[0, :3])  # Col 0-2 (3 columns)
     
     pivot = df.pivot(index='Market', columns='STO_Ratio', values='Financial_VaR95')
     pivot = pivot.reindex(['Perfect (100%)', 'Good (84%)', 'Recession (65%)', 'Crisis (41%)', 'Extreme (15%)'])
@@ -219,19 +240,21 @@ def create_comprehensive_visualization(all_results, df):
     
     ax1.set_xticks(np.arange(len(STO_LABELS)))
     ax1.set_yticks(np.arange(len(pivot.index)))
-    ax1.set_xticklabels(STO_LABELS)
-    ax1.set_yticklabels(pivot.index)
+    ax1.set_xticklabels(STO_LABELS, fontsize=11)
+    ax1.set_yticklabels(pivot.index, fontsize=11)
     
     for i in range(len(pivot.index)):
         for j in range(len(STO_LABELS)):
-            text = ax1.text(j, i, f'{pivot.values[i, j]:.0f}',
-                           ha="center", va="center", color="black", fontsize=10, fontweight='bold')
+            val = pivot.values[i, j]
+            text = ax1.text(j, i, f'{int(val/1000)}K',  # 천 단위
+                           ha="center", va="center", color="black", fontsize=9, fontweight='bold')
     
-    ax1.set_title('Financial Institution VaR95 (억원)', fontsize=14, fontweight='bold')
-    plt.colorbar(im, ax=ax1, label='VaR95 (억원)')
+    ax1.set_title('금융기관 VaR95 (억원)', fontsize=15, fontweight='bold', pad=15)
+    cbar1 = plt.colorbar(im, ax=ax1)
+    cbar1.set_label('VaR95 (억원)', fontsize=11)
     
-    # ===== Row 1, Col 3-4: Extended System Risk (Financial + Retail) =====
-    ax2 = fig.add_subplot(gs[0, 2:])
+    # ===== Row 1, Col 3-5: Extended System Risk (Financial + Retail) =====
+    ax2 = fig.add_subplot(gs[0, 3:])  # Col 3-4 (2 columns)
     
     pivot_extended = df.pivot(index='Market', columns='STO_Ratio', values='Extended_Systemic_VaR95')
     pivot_extended = pivot_extended.reindex(['Perfect (100%)', 'Good (84%)', 'Recession (65%)', 'Crisis (41%)', 'Extreme (15%)'])
@@ -240,48 +263,51 @@ def create_comprehensive_visualization(all_results, df):
     
     ax2.set_xticks(np.arange(len(STO_LABELS)))
     ax2.set_yticks(np.arange(len(pivot_extended.index)))
-    ax2.set_xticklabels(STO_LABELS)
-    ax2.set_yticklabels(pivot_extended.index)
+    ax2.set_xticklabels(STO_LABELS, fontsize=11)
+    ax2.set_yticklabels(pivot_extended.index, fontsize=11)
     
     for i in range(len(pivot_extended.index)):
         for j in range(len(STO_LABELS)):
-            text = ax2.text(j, i, f'{pivot_extended.values[i, j]:.0f}',
-                           ha="center", va="center", color="black", fontsize=10, fontweight='bold')
+            val = pivot_extended.values[i, j]
+            text = ax2.text(j, i, f'{int(val/1000)}K',
+                           ha="center", va="center", color="black", fontsize=9, fontweight='bold')
     
-    ax2.set_title('Extended System Risk VaR95 (Financial + Retail, 억원)', fontsize=14, fontweight='bold')
-    plt.colorbar(im2, ax=ax2, label='VaR95 (억원)')
+    ax2.set_title('확장 시스템 리스크 VaR95\n(금융+개인, 억원)', fontsize=15, fontweight='bold', pad=15)
+    cbar2 = plt.colorbar(im2, ax=ax2)
+    cbar2.set_label('VaR95 (억원)', fontsize=11)
     
     # ===== Row 2: System Risk Change (Delta) =====
-    ax3 = fig.add_subplot(gs[1, :2])
+    ax3 = fig.add_subplot(gs[1, :3])  # Col 0-2
     
     # Calculate system risk change
     pivot_change = df[df['STO_Ratio'] != 'Trad PF'].pivot(
         index='Market', columns='STO_Ratio', values='System_Risk_Change')
     pivot_change = pivot_change.reindex(['Perfect (100%)', 'Good (84%)', 'Recession (65%)', 'Crisis (41%)', 'Extreme (15%)'])
     
-    # Use diverging colormap (blue = decrease, red = increase)
+    # Use Reds colormap (all positive values)
     vmax = max(abs(pivot_change.values.min()), abs(pivot_change.values.max()))
-    im3 = ax3.imshow(pivot_change.values, cmap='RdBu_r', aspect='auto', 
-                     vmin=-vmax, vmax=vmax)
+    im3 = ax3.imshow(pivot_change.values, cmap='Reds', aspect='auto', 
+                     vmin=0, vmax=vmax)
     
     ax3.set_xticks(np.arange(len(pivot_change.columns)))
     ax3.set_yticks(np.arange(len(pivot_change.index)))
-    ax3.set_xticklabels(pivot_change.columns)
-    ax3.set_yticklabels(pivot_change.index)
+    ax3.set_xticklabels(pivot_change.columns, fontsize=11)
+    ax3.set_yticklabels(pivot_change.index, fontsize=11)
     
     for i in range(len(pivot_change.index)):
         for j in range(len(pivot_change.columns)):
             val = pivot_change.values[i, j]
-            color = 'white' if abs(val) > vmax * 0.5 else 'black'
-            text = ax3.text(j, i, f'{val:+.0f}\n({val/pivot.values[i, j+1]*100:+.1f}%)',
-                           ha="center", va="center", color=color, fontsize=9, fontweight='bold')
+            pct = val/pivot.values[i, j+1]*100 if pivot.values[i, j+1] > 0 else 0
+            text = ax3.text(j, i, f'+{int(val)}\n(+{pct:.1f}%)',
+                           ha="center", va="center", color="black", fontsize=8, fontweight='bold')
     
-    ax3.set_title('System Risk Change vs Traditional PF (억원)\n[Blue=Decrease, Red=Increase]', 
-                  fontsize=14, fontweight='bold')
-    plt.colorbar(im3, ax=ax3, label='Change (억원)')
+    ax3.set_title('개인 투자자 추가로 인한\n시스템 리스크 증가 (억원)', 
+                  fontsize=15, fontweight='bold', pad=15)
+    cbar3 = plt.colorbar(im3, ax=ax3)
+    cbar3.set_label('증가액 (억원)', fontsize=11)
     
-    # ===== Row 2, Col 3-4: Retail Loss Amount VaR95 Heatmap =====
-    ax4 = fig.add_subplot(gs[1, 2:])
+    # ===== Row 2, Col 3-5: Retail Loss Amount VaR95 Heatmap =====
+    ax4 = fig.add_subplot(gs[1, 3:])  # Col 3-4
     
     pivot_retail = df[df['STO_Ratio'] != 'Trad PF'].pivot(
         index='Market', columns='STO_Ratio', values='Retail_VaR95_Absolute')
@@ -300,12 +326,14 @@ def create_comprehensive_visualization(all_results, df):
             text = ax4.text(j, i, f'{val:.0f}억',
                            ha="center", va="center", color="black", fontsize=10, fontweight='bold')
     
-    ax4.set_title('Retail Investor Loss VaR95 (억원)', fontsize=14, fontweight='bold')
-    plt.colorbar(im4, ax=ax4, label='Loss Amount (억원)')
+    ax4.set_title('STO 비율별 개인 투자자 손실 VaR95 (억원)', fontsize=14, fontweight='bold')
+    cbar4 = plt.colorbar(im4, ax=ax4)
+    cbar4.set_label('손실액 (억원)', fontsize=11)
     
-    # ===== Row 3: Financial VaR by Market Scenario =====
-    for idx, market_key in enumerate(MARKET_SCENARIOS.keys()):
-        ax = fig.add_subplot(gs[2, idx])
+    # ===== Row 3: Financial VaR by Market Scenario (5 subplots) =====
+    market_keys_ordered = ['Perfect', 'Good', 'Recession', 'Crisis', 'Extreme']
+    for idx, market_key in enumerate(market_keys_ordered):
+        ax = fig.add_subplot(gs[2, idx])  # Each column for each scenario (0-4)
         
         market_label = MARKET_SCENARIOS[market_key]['label']
         market_color = MARKET_SCENARIOS[market_key]['color']
@@ -313,21 +341,24 @@ def create_comprehensive_visualization(all_results, df):
         market_data = df[df['Market'] == market_label]
         
         bars = ax.bar(market_data['STO_Ratio'], market_data['Financial_VaR95'],
-                     color=market_color, edgecolor='black', alpha=0.7)
+                     color=market_color, edgecolor='black', alpha=0.7, width=0.6)
         
         ax.set_ylabel('VaR95 (억원)', fontsize=10)
-        ax.set_title(market_label, fontsize=12, fontweight='bold')
-        ax.tick_params(axis='x', rotation=45)
+        ax.set_title(market_label, fontsize=12, fontweight='bold', pad=10)
+        ax.tick_params(axis='x', rotation=45, labelsize=9)
+        ax.tick_params(axis='y', labelsize=9)
         ax.grid(True, alpha=0.3, axis='y')
         
+        # 값 표시 (더 작게)
         for bar in bars:
             height = bar.get_height()
-            ax.text(bar.get_x() + bar.get_width()/2., height,
-                   f'{height:.0f}',
-                   ha='center', va='bottom', fontsize=8)
+            if height > 0:
+                ax.text(bar.get_x() + bar.get_width()/2., height,
+                       f'{int(height/1000)}K',  # 천 단위로 표시
+                       ha='center', va='bottom', fontsize=7)
     
     # ===== Row 4: STO Benefit (VaR Reduction %) =====
-    ax5 = fig.add_subplot(gs[3, :2])
+    ax5 = fig.add_subplot(gs[3, :3])  # Col 0-2
     
     # Calculate reduction vs Traditional PF
     reductions = []
@@ -361,13 +392,14 @@ def create_comprehensive_visualization(all_results, df):
             text = ax5.text(j, i, f'{val:.1f}%',
                            ha="center", va="center", color="black", fontsize=10, fontweight='bold')
     
-    ax5.set_title('STO Benefit: Financial VaR Reduction vs Traditional PF (%)', fontsize=14, fontweight='bold')
-    plt.colorbar(im5, ax=ax5, label='Reduction (%)')
+    ax5.set_title('STO 도입 효과: 금융기관 VaR 감소율 vs 기존 PF (%)', fontsize=15, fontweight='bold', pad=15)
+    cbar5 = plt.colorbar(im5, ax=ax5)
+    cbar5.set_label('감소율 (%)', fontsize=11)
     
-    # ===== Row 4, Col 3-4: Sales Rate Evolution =====
-    ax6 = fig.add_subplot(gs[3, 2:5])
+    # ===== Row 4, Col 3-5: Sales Rate Evolution =====
+    ax6 = fig.add_subplot(gs[3, 3:])  # Col 3-4
     
-    quarters = np.arange(16)  # 17 → 16 (T=16)
+    quarters = np.arange(16)  # T=16
     
     for market_key in MARKET_SCENARIOS.keys():
         market_label = MARKET_SCENARIOS[market_key]['label']
@@ -382,15 +414,15 @@ def create_comprehensive_visualization(all_results, df):
             ax6.plot(quarters, sales_evolution, color=market_color, linewidth=2.5,
                     label=market_label, marker='o', markersize=4)
     
-    ax6.set_xlabel('Time (Quarters)', fontsize=11)
-    ax6.set_ylabel('Sales Rate (%)', fontsize=11)
-    ax6.set_title('Sales Rate Evolution (STO 28%)', fontsize=13, fontweight='bold')
-    ax6.legend(fontsize=10)
+    ax6.set_xlabel('시간 (분기)', fontsize=12)
+    ax6.set_ylabel('분양률 (%)', fontsize=12)
+    ax6.set_title('시장 시나리오별 분양률 추이 (STO 28%)', fontsize=15, fontweight='bold', pad=15)
+    ax6.legend(fontsize=10, loc='best')
     ax6.grid(True, alpha=0.3)
     ax6.set_ylim(0, 105)
     
     # ===== Row 5: Transition Speed Analysis =====
-    ax7 = fig.add_subplot(gs[4, :2])
+    ax7 = fig.add_subplot(gs[4, :3])  # Col 0-2
     
     quarters = np.arange(16)  # T=16
     
@@ -419,14 +451,14 @@ def create_comprehensive_visualization(all_results, df):
                     linestyle='-', linewidth=2.5,
                     label=f"{MARKET_SCENARIOS[market_key]['label']} (STO 28%)")
     
-    ax7.set_xlabel('Time (Quarters)', fontsize=11)
-    ax7.set_ylabel('Systemic Loss (% of Portfolio)', fontsize=11)
-    ax7.set_title('Transition Speed: Traditional PF vs STO 28%', fontsize=13, fontweight='bold')
-    ax7.legend(fontsize=8, ncol=2)
+    ax7.set_xlabel('시간 (분기)', fontsize=12)
+    ax7.set_ylabel('시스템 손실 (포트폴리오 %)', fontsize=12)
+    ax7.set_title('전이 속도 비교: 기존 PF vs STO 28%', fontsize=15, fontweight='bold', pad=15)
+    ax7.legend(fontsize=9, ncol=2, loc='best')
     ax7.grid(True, alpha=0.3)
     
-    # ===== Row 5, Col 3-4: Time to 1% Loss =====
-    ax8 = fig.add_subplot(gs[4, 2:5])
+    # ===== Row 5, Col 3-5: Time to 1% Loss =====
+    ax8 = fig.add_subplot(gs[4, 3:])  # Col 3-4
     
     def time_to_threshold(systemic_loss, threshold_pct):
         threshold = 100 * 1000 * threshold_pct
@@ -467,8 +499,9 @@ def create_comprehensive_visualization(all_results, df):
             text = ax8.text(j, i, f'{val:.1f}Q',
                            ha="center", va="center", color="black", fontsize=9, fontweight='bold')
     
-    ax8.set_title('Time to Reach 1% Portfolio Loss (Quarters)', fontsize=13, fontweight='bold')
-    plt.colorbar(im6, ax=ax8, label='Time (Q)')
+    ax8.set_title('포트폴리오 1% 손실 도달 시간 (분기)', fontsize=15, fontweight='bold', pad=15)
+    cbar8 = plt.colorbar(im6, ax=ax8)
+    cbar8.set_label('시간 (분기)', fontsize=11)
     
     # ===== Row 6: Summary Statistics Table =====
     ax9 = fig.add_subplot(gs[5, :])
@@ -496,7 +529,12 @@ def create_comprehensive_visualization(all_results, df):
         row_ext = [f'{market_label} - Ext VaR95']
         for sto_label in STO_LABELS:
             scenario = f"{sto_label}_{market_key}"
-            ext_var = all_results[scenario]['metrics']['extended_VaR_95'] if sto_label != 'Trad PF' else all_results[scenario]['metrics']['VaR_95']
+            if sto_label == 'Trad PF':
+                ext_var = all_results[scenario]['metrics']['VaR_95']
+            else:
+                fin_var = all_results[scenario]['metrics']['VaR_95']
+                ret_var = all_results[scenario]['metrics']['retail_VaR_95']
+                ext_var = fin_var + ret_var
             row_ext.append(f'{ext_var:,.0f}억')
         summary_rows.append(row_ext)
         
@@ -505,8 +543,8 @@ def create_comprehensive_visualization(all_results, df):
         row_change.append('0억')  # Trad PF baseline
         for sto_label in STO_LABELS[1:]:
             scenario = f"{sto_label}_{market_key}"
-            change = all_results[scenario]['metrics']['extended_VaR_95'] - all_results[scenario]['metrics']['VaR_95']
-            row_change.append(f'{change:+,.0f}억')
+            change = all_results[scenario]['metrics']['retail_VaR_95']
+            row_change.append(f'+{change:,.0f}억')
         summary_rows.append(row_change)
         
         # Retail Loss Amount (skip Trad PF)
@@ -543,8 +581,6 @@ def create_comprehensive_visualization(all_results, df):
     
     plt.savefig('comprehensive_analysis_v1000.png', dpi=150, bbox_inches='tight')
     print("\n✅ Comprehensive visualization saved: comprehensive_analysis_v1000.png")
-
-
 def export_results_to_excel(df, all_results):
     """Excel로 결과 내보내기"""
     
