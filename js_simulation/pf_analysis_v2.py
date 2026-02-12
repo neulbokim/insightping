@@ -26,6 +26,10 @@ class ImprovedRiskAnalyzer:
         """VaR 및 ES 계산"""
         metrics = {}
         
+        # 평균 추가
+        metrics['mean'] = loss_distribution.mean()
+        metrics['median'] = np.median(loss_distribution)
+        
         for alpha in confidence_levels:
             var = np.percentile(loss_distribution, alpha * 100)
             metrics[f'VaR_{int(alpha*100)}'] = var
@@ -127,22 +131,59 @@ class ImprovedRiskAnalyzer:
         
         # STO 추가 지표
         if 'retail_loss' in losses:
-            # 개인 투자자 손실
-            retail_total = losses['retail_loss'].sum(axis=(1, 2))
+            # 개인 투자자 손실 (최종 시점 기준)
+            retail_total = losses['retail_loss'][:, :, -1].sum(axis=1)  # (n_sim,) 시뮬레이션별 총 손실
             retail_metrics = self.calculate_var_es(retail_total)
             retail_metrics = {f'retail_{k}': v for k, v in retail_metrics.items()}
             self.metrics.update(retail_metrics)
             
-            # 확장 시스템 손실
-            extended_total = losses['systemic_loss_extended'].sum(axis=1)
+            # 확장 시스템 손실 (최종 시점 기준)
+            extended_total = losses['systemic_loss_extended'][:, -1]  # 마지막 시점만!
             extended_metrics = self.calculate_var_es(extended_total)
             extended_metrics = {f'extended_{k}': v for k, v in extended_metrics.items()}
             self.metrics.update(extended_metrics)
             
-            # 개인 투자자 손실률
-            initial_junior = self.results['state']['securitization_junior'][:, :, 0].sum()
-            retail_loss_rate = retail_total.mean() / (initial_junior + 1e-10)
-            self.metrics['retail_loss_rate'] = retail_loss_rate
+            # 개인 투자자 초기 투자금
+            initial_junior = (
+                self.params.n_projects * 
+                self.params.total_project_value * 
+                self.params.securitization_ratio * 
+                self.params.sto_ratio
+            )
+            self.metrics['retail_initial_investment'] = initial_junior
+            
+            # 개인 투자자 손실률 통계 (NEW!)
+            loss_rates = retail_total / (initial_junior + 1e-10)
+            self.metrics['retail_loss_rate_mean'] = loss_rates.mean()
+            self.metrics['retail_loss_rate_median'] = np.median(loss_rates)
+            self.metrics['retail_loss_rate_VaR95'] = np.percentile(loss_rates, 95)
+            self.metrics['retail_loss_rate_VaR99'] = np.percentile(loss_rates, 99)
+            
+            # ES Rate (Expected Shortfall Rate)
+            VaR95_threshold = np.percentile(loss_rates, 95)
+            tail_losses_95 = loss_rates[loss_rates >= VaR95_threshold]
+            if len(tail_losses_95) > 0:
+                self.metrics['retail_loss_rate_ES95'] = tail_losses_95.mean()
+            else:
+                self.metrics['retail_loss_rate_ES95'] = 0.0
+            
+            VaR99_threshold = np.percentile(loss_rates, 99)
+            tail_losses_99 = loss_rates[loss_rates >= VaR99_threshold]
+            if len(tail_losses_99) > 0:
+                self.metrics['retail_loss_rate_ES99'] = tail_losses_99.mean()
+            else:
+                self.metrics['retail_loss_rate_ES99'] = 0.0
+            
+            # 손실 발생 확률 (손실 > 0인 시뮬레이션 비율)
+            loss_occurred_rate = (retail_total > 0).mean()
+            self.metrics['retail_loss_probability'] = loss_occurred_rate
+            
+            # 손실 발생 시 평균 손실 (조건부)
+            if loss_occurred_rate > 0:
+                conditional_loss = retail_total[retail_total > 0].mean()
+                self.metrics['retail_conditional_loss'] = conditional_loss
+            else:
+                self.metrics['retail_conditional_loss'] = 0.0
         
         return self.metrics
     

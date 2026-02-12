@@ -99,7 +99,7 @@ class SimulationParams:
     
     # 초기값
     initial_sales: float = 0.15
-    total_project_value: float = 100.0  # 억원
+    total_project_value: float = 1000.0  # 억원 (현실성 반영)
     
     def __post_init__(self):
         """기본값 설정 및 검증"""
@@ -282,7 +282,8 @@ class ImprovedPFSimulation:
                 np.sqrt(1 - rho)[:, np.newaxis] * epsilon
             )
             
-            # 트렌드 + 노이즈
+            # 트렌드 + 노이즈 (브로드캐스팅)
+            # logistic_trend는 스칼라, noise는 (n_sim, n_proj)
             sales_rate = logistic_trend + noise
             
         else:
@@ -693,8 +694,8 @@ class ImprovedPFSimulation:
                 )
                 losses['systemic_loss_extended'][:, t] = (
                     losses['systemic_loss'][:, t] +
-                    loss_t['retail_loss'].sum(axis=1) +
-                    loss_t['equity_loss'].sum(axis=1)  # Q4: 자기자본 손실 포함
+                    loss_t['retail_loss'].sum(axis=1)
+                    # equity_loss는 이미 포함됨 (중복 방지)
                 )
             else:
                 # t-1 시점 잔액으로 손실 계산
@@ -714,8 +715,8 @@ class ImprovedPFSimulation:
                 
                 losses['systemic_loss'][:, t] = (
                     loss_t['securities_loss'].sum(axis=1) +
-                    loss_t['construction_loss'].sum(axis=1) +
-                    loss_t['equity_loss'].sum(axis=1)  # Q4: 자기자본 손실 포함
+                    loss_t['construction_loss'].sum(axis=1)
+                    # equity_loss는 이미 securities_loss에서 차감됨 (중복 방지)
                 )
             
             # 유동화 잔액 업데이트 (손실 계산 후!)

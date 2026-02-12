@@ -10,14 +10,14 @@
 
 ## **Notation (표기법)**
 
-| 기호 | 의미 |
-|------|------|
-| $i$ | 프로젝트 인덱스 ($i = 1, \ldots, N$) |
-| $t$ | 시간 인덱스 (분기, $t = 0, \ldots, T$) |
-| $m$ | 몬테카를로 시뮬레이션 인덱스 ($m = 1, \ldots, M$) |
-| $N$ | 총 프로젝트 수 (100) |
-| $T$ | 총 시뮬레이션 기간 (16분기) |
-| $M$ | 몬테카를로 시행 횟수 (10,000) |
+| 기호 | 의미                                              |
+| ---- | ------------------------------------------------- |
+| $i$  | 프로젝트 인덱스 ($i = 1, \ldots, N$)              |
+| $t$  | 시간 인덱스 (분기, $t = 0, \ldots, T$)            |
+| $m$  | 몬테카를로 시뮬레이션 인덱스 ($m = 1, \ldots, M$) |
+| $N$  | 총 프로젝트 수 (100)                              |
+| $T$  | 총 시뮬레이션 기간 (16분기)                       |
+| $M$  | 몬테카를로 시행 횟수 (10,000)                     |
 
 ---
 
@@ -27,7 +27,7 @@
 
 ## **1.1 프로젝트 기본 파라미터 (Q1)**
 
-$$V = 100 \text{억원}$$
+$$V = 1000 \text{억원}$$
 
 **자금 조달 구조:**
 $$\epsilon = 0.05 \quad \text{(자기자본)}$$
@@ -38,9 +38,10 @@ $$\gamma = 0.25 \quad \text{(시공사)}$$
 $$\epsilon + \lambda + \gamma = 1.0$$
 
 **배분:**
-- 자기자본: $E = V \cdot \epsilon = 5$ 억원
-- 유동화: $A = V \cdot \lambda = 70$ 억원
-- 시공사: $C = V \cdot \gamma = 25$ 억원
+
+- 자기자본: $E = V \cdot \epsilon = 50$ 억원
+- 유동화: $A = V \cdot \lambda = 700$ 억원
+- 시공사: $C = V \cdot \gamma = 250$ 억원
 
 ---
 
@@ -67,6 +68,7 @@ $$A_i^{\text{junior},(0)} = 70 \times \theta = 19.6 \text{억원}$$
 $$\gamma_g = 0.20 \quad \text{(책임준공 비율)}$$
 
 **의미:**
+
 - 총 시공비: 25억 (전체 프로젝트의 25%)
 - 책임준공 보증: 20억 (프로젝트의 20%)
 
@@ -77,6 +79,7 @@ $$\gamma_g = 0.20 \quad \text{(책임준공 비율)}$$
 $$CR_i \sim \text{Uniform}(0.50, 0.70)$$
 
 **의미:**
+
 - 프로젝트별 고정
 - 시공비가 높을수록 회수율 하락
 
@@ -101,6 +104,7 @@ $$CR_i \sim \text{Uniform}(0.50, 0.70)$$
 $$S_{i,t}^{(m)} = S_{\min} + \frac{S_{\max} - S_{\min}}{1 + \exp\left(-k_{\text{adj}}(t - t_0)\right)} + \xi_{i,t}^{(m)}$$
 
 **파라미터:**
+
 - $S_{\min} = 0.15$: 초기 분양률
 - $S_{\max} = 0.85$: 최대 분양률
 - $k = 0.5$: 기본 성장 속도
@@ -126,10 +130,12 @@ $$\xi_{i,t}^{(m)} = \sigma_S \left( \sqrt{\rho_t^{(m)}} Z_t^{(m)} + \sqrt{1 - \r
 
 ## **2.4 차환 실패시 분양 중단**
 
-$$S_{i,t}^{(m)} = \begin{cases}
+$$
+S_{i,t}^{(m)} = \begin{cases}
 \text{Logistic}(t) + \xi & \text{if } R_{i,t-1}^{(m)} = 1 \\
 S_{i,t-1}^{(m)} & \text{if } R_{i,t-1}^{(m)} = 0
-\end{cases}$$
+\end{cases}
+$$
 
 ---
 
@@ -144,6 +150,7 @@ $$P\left(R_{i,t}^{(m)} = 1\right) = \frac{1}{1 + \exp(-X_{i,t}^{(m)})}$$
 $$X_{i,t}^{(m)} = \alpha_0 + \alpha_s S_{i,t}^{(m)} + \alpha_{s^2} \left(S_{i,t}^{(m)}\right)^2 + \alpha_z Z_t^{(m)} + \alpha_{\Phi} \Phi_t^{(m)} + \alpha_g G_i + \alpha_b B_i^{(t)} + \alpha_e E_{i,t}^{(m)}$$
 
 **파라미터:**
+
 - $\alpha_0 = 2.0$
 - $\alpha_s = 6.0$
 - $\alpha_{s^2} = -1.5$
@@ -167,6 +174,7 @@ $$\eta_{i,t}^{\text{effective},(m)} = \left[ \eta_{\text{base}} + \beta_s S_{i,t
 $$\eta_{i,t}^{\text{base},(m)} = \eta_{\text{base}} + \beta_s S_{i,t}^{(m)} + \beta_c c - \beta_{\text{cost}} CR_i + \beta_g (4 - G_i)$$
 
 **파라미터:**
+
 - $\eta_{\text{base}} = 0.25$: 기본 회수율
 - $\beta_s = 0.4$: 분양률 계수
 - $\beta_c = 0.3$: 담보 계수
@@ -182,17 +190,21 @@ $$\eta_{i,t}^{\text{base},(m)} \in [0.15, 0.80]$$
 
 ## **4.2 시장 연동 급매 할인 (Part 4.1, 4.2)**
 
-$$\delta_t^{(m)} = \begin{cases}
+$$
+\delta_t^{(m)} = \begin{cases}
 0.3 & \text{if Panic Mode} \\
 0.5 & \text{otherwise}
-\end{cases}$$
+\end{cases}
+$$
 
 ### **Panic Mode 조건 (Part 4.2):**
 
-$$\text{Panic}\_t^{(m)} = \begin{cases}
+$$
+\text{Panic}\_t^{(m)} = \begin{cases}
 1 & \text{if } \frac{\sum_{i=1}^{N} \mathbb{1}(R_{i,t}^{(m)}=0)}{N} > \tau \\
 0 & \text{otherwise}
-\end{cases}$$
+\end{cases}
+$$
 
 - $\tau = 0.15$: 공황 임계치 (15% 동시 부실)
 
@@ -201,6 +213,7 @@ $$\text{Panic}\_t^{(m)} = \begin{cases}
 $$\text{Panic}_t^{(m)} = \text{Panic}_{t-1}^{(m)} \lor \left(\text{failure\_rate}_t > \tau\right)$$
 
 **의미:**
+
 - 한 번 Panic Mode 진입하면 영구 고정
 - $\delta = 0.3$으로 고정 (복귀 불가)
 
@@ -211,6 +224,7 @@ $$\text{Panic}_t^{(m)} = \text{Panic}_{t-1}^{(m)} \lor \left(\text{failure\_rate
 $$\eta_{i,t}^{\text{effective},(m)} = \eta_{i,t}^{\text{base},(m)} \times \delta_t^{(m)}$$
 
 **범위:**
+
 - Normal: $[0.15 \times 0.5, 0.80 \times 0.5] = [7.5\%, 40\%]$
 - Panic: $[0.15 \times 0.3, 0.80 \times 0.3] = [4.5\%, 24\%]$
 
@@ -263,6 +277,7 @@ $$V_{i,t}^{\text{presale},(m)} = S_{i,t}^{(m)} \times 100$$
 $$V_{i,t}^{\text{land},(m)} = \left(1 - S_{i,t}^{(m)}\right) \times 100 \times c \times \delta_t^{(m)}$$
 
 **급매 할인 동적:**
+
 - Normal: $\delta = 0.5$
 - Panic: $\delta = 0.3$ (Part 4.2)
 
@@ -301,6 +316,7 @@ $$L_{i,t}^{\text{con},(m)} = \left( L_{i,t}^{\text{completion},(m)} + L_{i,t}^{\
 $$\rho_t^{(m)} = \rho_{\text{base}} + \beta_{\text{sys}} \cdot \mathbb{1}\left(r_t^{\text{sys},(m)} > \tau_{\text{sys}}\right) + \beta_{\text{sto}} \cdot r_t^{\text{retail},(m)} + \beta_{\text{liq}} \cdot \Phi_t^{(m)} + \beta_{\text{cons}} \cdot \psi_t^{(m)}$$
 
 **파라미터:**
+
 - $\rho_{\text{base}} = 0.18$
 - $\beta_{\text{sys}} = 0.30$
 - $\beta_{\text{sto}} = 0.25$
@@ -342,27 +358,27 @@ $$\mathbb{E}[T_{\text{panic}}] = \frac{1}{\sum_{m=1}^{M} \mathbb{1}(\text{Panic}
 
 ---
 
-| 파라미터 | 값 | 의미 |
-|---------|-----|------|
-| **구조 (Q1)** |||
-| $\epsilon$ | 0.05 | 자기자본 비율 |
-| $\lambda$ | 0.70 | 유동화 비율 |
-| $\gamma$ | 0.25 | 시공사 비율 |
-| $\gamma_g$ | 0.20 | 책임준공 비율 (Q2) |
-| **분양률 (Q5)** |||
-| $S_{\min}$ | 0.15 | 초기 분양률 |
-| $S_{\max}$ | 0.85 | 최대 분양률 |
-| $k$ | 0.5 | 성장 속도 |
-| $t_0$ | 8.0 | 변곡점 |
-| **회수율 (Part 4.1)** |||
-| $\eta_{\text{base}}$ | 0.25 | 기본 회수율 |
-| $\beta_s$ | 0.4 | 분양률 계수 |
-| $\beta_c$ | 0.3 | 담보 계수 |
-| $\beta_{\text{cost}}$ | 0.15 | 시공비 계수 (신규!) |
-| **급매 할인 (Part 4.2)** |||
-| $\delta_{\text{base}}$ | 0.5 | 기본 급매 할인 |
-| $\delta_{\text{panic}}$ | 0.3 | 공황 급매 할인 (신규!) |
-| $\tau_{\text{panic}}$ | 0.15 | 공황 임계치 (신규!) |
+| 파라미터                 | 값   | 의미                   |
+| ------------------------ | ---- | ---------------------- |
+| **구조 (Q1)**            |      |                        |
+| $\epsilon$               | 0.05 | 자기자본 비율          |
+| $\lambda$                | 0.70 | 유동화 비율            |
+| $\gamma$                 | 0.25 | 시공사 비율            |
+| $\gamma_g$               | 0.20 | 책임준공 비율 (Q2)     |
+| **분양률 (Q5)**          |      |                        |
+| $S_{\min}$               | 0.15 | 초기 분양률            |
+| $S_{\max}$               | 0.85 | 최대 분양률            |
+| $k$                      | 0.5  | 성장 속도              |
+| $t_0$                    | 8.0  | 변곡점                 |
+| **회수율 (Part 4.1)**    |      |                        |
+| $\eta_{\text{base}}$     | 0.25 | 기본 회수율            |
+| $\beta_s$                | 0.4  | 분양률 계수            |
+| $\beta_c$                | 0.3  | 담보 계수              |
+| $\beta_{\text{cost}}$    | 0.15 | 시공비 계수 (신규!)    |
+| **급매 할인 (Part 4.2)** |      |                        |
+| $\delta_{\text{base}}$   | 0.5  | 기본 급매 할인         |
+| $\delta_{\text{panic}}$  | 0.3  | 공황 급매 할인 (신규!) |
+| $\tau_{\text{panic}}$    | 0.15 | 공황 임계치 (신규!)    |
 
 ---
 
