@@ -87,12 +87,17 @@ class SimulationParams:
     # 시공사 등급별 분포
     construction_grade_dist: List[float] = None
     
-    # 구조 파라미터 (Q1, Q4 개선)
-    equity_ratio: float = 0.05         # 자기자본 비율 (5%) - 추가!
-    bridge_ratio: float = 0.25         # 브릿지론 단계 비율 (초기)
-    securitization_ratio: float = 0.70  # 유동화 비율 (45% → 70%)
-    construction_ratio: float = 0.25    # 시공사 부담 비율 (25%)
-    sto_ratio: float = 0.28            # 후순위(STO) 비율 (유동화 중)
+    # ===== 자금 조달 구조 (Funding Structure) =====
+    # 국내 PF 실무: 자기자본 3-5%, 부채 95-97%
+    equity_ratio: float = 0.05         # 자기자본 비율 (5%)
+    debt_ratio: float = 0.95           # 부채(유동화) 비율 (95%)
+    sto_ratio: float = 0.28            # 후순위(Junior/STO) 비율 (부채 중)
+    
+    # ===== 비용 구조 (Cost Structure, 참고용) =====
+    # 주의: 자금 조달과 별개 (지출 항목)
+    construction_cost_ratio: float = 0.60   # 시공비 60%
+    land_cost_ratio: float = 0.25           # 토지비 25%
+    other_cost_ratio: float = 0.15          # 기타비 15%
     
     # 시스템 리스크 임계치
     systemic_threshold: float = 0.12
@@ -115,10 +120,13 @@ class SimulationParams:
             # AAA: 10%, AA: 25%, A: 35%, BBB: 20%, BB: 10%
             self.construction_grade_dist = [0.10, 0.25, 0.35, 0.20, 0.10]
         
-        # Q1 검증: 자기자본 + 유동화 + 시공사 = 100%
-        total_ratio = self.equity_ratio + self.securitization_ratio + self.construction_ratio
-        assert abs(total_ratio - 1.0) < 1e-6, \
-            f"자금 조달 비율 합계가 100%가 아닙니다: {total_ratio:.2%}"
+        # 검증: 자기자본 + 부채 = 100%
+        total_funding = self.equity_ratio + self.debt_ratio
+        assert abs(total_funding - 1.0) < 1e-6, \
+            f"자금 조달 비율 합계가 100%가 아닙니다: {total_funding:.2%} (자기자본 {self.equity_ratio:.1%} + 부채 {self.debt_ratio:.1%})"
+        
+        # 참고: 비용 구조는 별도 (합계 검증 불필요)
+        # construction_cost + land_cost + other_cost = 100% (지출)
 
 
 class ImprovedPFSimulation:
@@ -180,23 +188,20 @@ class ImprovedPFSimulation:
         # 초기 분양률
         state['sales_rate'][:, :, 0] = p.initial_sales
         
-        # 초기 프로젝트 단계 (25%는 브릿지론, 75%는 본PF)
-        initial_stages = np.random.choice(
-            [ProjectStage.BRIDGE.value, ProjectStage.MAIN_PF.value],
-            size=(p.n_simulations, p.n_projects),
-            p=[p.bridge_ratio, 1 - p.bridge_ratio]
-        )
-        state['project_stage'][:, :, 0] = initial_stages
+        # 초기 프로젝트 단계: 모두 본PF로 시작 (단순화)
+        state['project_stage'][:, :, 0] = ProjectStage.MAIN_PF.value
         
-        # 초기 유동화 잔액
-        initial_balance = p.total_project_value * p.securitization_ratio
-        state['securitization_balance'][:, :, 0] = initial_balance
+        # 초기 유동화 잔액 (부채 95%)
+        initial_debt = p.total_project_value * p.debt_ratio
+        state['securitization_balance'][:, :, 0] = initial_debt
         
         if self.use_sto:
-            state['securitization_senior'][:, :, 0] = initial_balance * (1 - p.sto_ratio)
-            state['securitization_junior'][:, :, 0] = initial_balance * p.sto_ratio
+            # STO 구조: Senior + Junior
+            state['securitization_senior'][:, :, 0] = initial_debt * (1 - p.sto_ratio)
+            state['securitization_junior'][:, :, 0] = initial_debt * p.sto_ratio
         else:
-            state['securitization_senior'][:, :, 0] = initial_balance
+            # 기존 PF: Senior만
+            state['securitization_senior'][:, :, 0] = initial_debt
         
         # 초기 미분양
         state['unsold_amount'][:, :, 0] = (1 - p.initial_sales) * p.total_project_value
@@ -689,6 +694,7 @@ class ImprovedPFSimulation:
                 losses['retail_loss'][:, :, t] = loss_t['retail_loss']
                 
                 losses['systemic_loss'][:, t] = (
+                    loss_t['equity_loss'].sum(axis=1) +      # 자기자본 손실
                     loss_t['securities_loss'].sum(axis=1) +
                     loss_t['construction_loss'].sum(axis=1)
                 )
@@ -714,9 +720,9 @@ class ImprovedPFSimulation:
                 losses['construction_loss'][:, :, t] = loss_t['construction_loss']
                 
                 losses['systemic_loss'][:, t] = (
+                    loss_t['equity_loss'].sum(axis=1) +      # 자기자본 손실
                     loss_t['securities_loss'].sum(axis=1) +
                     loss_t['construction_loss'].sum(axis=1)
-                    # equity_loss는 이미 securities_loss에서 차감됨 (중복 방지)
                 )
             
             # 유동화 잔액 업데이트 (손실 계산 후!)

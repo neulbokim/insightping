@@ -1,5 +1,6 @@
 """
 개선된 부동산 PF 시뮬레이션 분석 모듈
+실무 구조 반영: 자기자본 5% + 부채 95%
 """
 
 import numpy as np
@@ -143,11 +144,11 @@ class ImprovedRiskAnalyzer:
             extended_metrics = {f'extended_{k}': v for k, v in extended_metrics.items()}
             self.metrics.update(extended_metrics)
             
-            # 개인 투자자 초기 투자금
+            # 개인 투자자 초기 투자금 (실무 구조: 부채 95% × STO 비율)
             initial_junior = (
                 self.params.n_projects * 
                 self.params.total_project_value * 
-                self.params.securitization_ratio * 
+                self.params.debt_ratio *  # 수정: debt_ratio = 0.95
                 self.params.sto_ratio
             )
             self.metrics['retail_initial_investment'] = initial_junior
@@ -225,7 +226,7 @@ class ImprovedRiskAnalyzer:
             print(f"  ES 95%:  {self.metrics['retail_ES_95']:,.0f} 억원")
             print(f"  VaR 99%: {self.metrics['retail_VaR_99']:,.0f} 억원")
             print(f"  ES 99%:  {self.metrics['retail_ES_99']:,.0f} 억원")
-            print(f"  평균 손실률: {self.metrics['retail_loss_rate']:.2%}")
+            print(f"  평균 손실률: {self.metrics['retail_loss_rate_mean']:.2%}")
             
             print("\n6. 확장 시스템 손실 (금융 + 가계)")
             print(f"  VaR 95%: {self.metrics['extended_VaR_95']:,.0f} 억원")
@@ -459,4 +460,4 @@ class ImprovedVisualizer:
 
 
 if __name__ == "__main__":
-    print("✓ 개선된 분석 모듈 준비 완료")
+    print("✓ 개선된 분석 모듈 준비 완료 (실무 구조 반영: 부채 95%)")
