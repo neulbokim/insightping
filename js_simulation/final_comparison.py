@@ -5,11 +5,14 @@
 - 총 55개 시나리오
 """
 
+import argparse
 import numpy as np
 import pandas as pd
+from types import SimpleNamespace
+from tqdm import tqdm
 from pf_simulation_v2 import SimulationParams, ImprovedPFSimulation
 from pf_analysis_v2 import ImprovedRiskAnalyzer
-from final_visualization import create_comprehensive_visualization
+
 
 
 # ===== 시나리오 정의 =====
@@ -101,29 +104,26 @@ def run_scenario(sto_ratio, market_key, n_simulations=50000):
     return results, metrics, params
 
 
-def run_all_scenarios():
+def run_all_scenarios(n_simulations):
     """모든 시나리오 실행"""
-    total_scenarios = len(STO_RATIOS) * len(MARKET_SCENARIOS)
+    combos = [(i, sto) for i, sto in enumerate(STO_RATIOS) for _ in MARKET_SCENARIOS.keys()]
+    total_scenarios = len(combos)
     print("="*80)
     print(f"RUNNING ALL SCENARIOS ({total_scenarios} combinations)")
     print("="*80)
-    
+
     all_results = {}
-    
+    last_params = None
+    progress = tqdm(total=total_scenarios, unit="scenario", desc="Scenarios")
     for sto_idx, sto_ratio in enumerate(STO_RATIOS):
         sto_label = STO_LABELS[sto_idx]
-        
         for market_key in MARKET_SCENARIOS.keys():
             market_label = MARKET_SCENARIOS[market_key]['label']
-            
             scenario_name = f"{sto_label}_{market_key}"
             print(f"\n[{scenario_name}] Running...")
-            
-            results, metrics, params = run_scenario(sto_ratio, market_key)
-            
+            results, metrics, params = run_scenario(sto_ratio, market_key, n_simulations)
             final_sales = results['state']['sales_rate'][:, :, -1].mean()
-            
-            # 메모리 절약: 필요한 것만 저장
+            # store
             all_results[scenario_name] = {
                 'sto_ratio': sto_ratio,
                 'sto_label': sto_label,
@@ -131,31 +131,31 @@ def run_all_scenarios():
                 'market_label': market_label,
                 'results': {
                     'state': {
-                        'sales_rate': results['state']['sales_rate'],  # 필요
+                        'sales_rate': results['state']['sales_rate'],
                     },
                     'losses': {
-                        'systemic_loss': results['losses']['systemic_loss'],  # 필요
-                        'retail_loss': results['losses']['retail_loss'] if sto_ratio > 0 else None,  # 필요 (STO만)
+                        'systemic_loss': results['losses']['systemic_loss'],
+                        'retail_loss': results['losses']['retail_loss'] if sto_ratio > 0 else None,
                     }
                 },
                 'metrics': metrics,
                 'params': params,
                 'final_sales': final_sales,
             }
-            
             print(f"  Sales: {final_sales:.1%}")
             print(f"  Financial VaR95: {metrics['VaR_95']:.0f}억")
             if sto_ratio > 0:
                 print(f"  Retail Loss Rate (VaR95): {metrics['retail_loss_rate_VaR95']*100:.2f}%")
-            
-            # 메모리 해제
             del results
+            progress.update()
+            last_params = params
+    progress.close()
     
     print("\n" + "="*80)
     print("✅ ALL SCENARIOS COMPLETE")
     print("="*80)
     
-    return all_results
+    return all_results, last_params
 
 
 def create_summary_table(all_results):
@@ -202,11 +202,20 @@ def create_summary_table(all_results):
     df = pd.DataFrame(data)
     return df
 
+def _safe_financial_var(df: pd.DataFrame, market_label: str, sto_label: str) -> float:
+    mask = (df['Market'] == market_label) & (df['STO_Ratio'] == sto_label)
+    if mask.any():
+        return float(df.loc[mask, 'Financial_VaR95'].iloc[0])
+    return 0.0
 
-def export_results_to_excel(df, all_results):
+
+
+def export_results_to_excel(df, all_results, params):
     """Excel로 결과 내보내기"""
     
-    with pd.ExcelWriter('simulation_results_v1000.xlsx', engine='openpyxl') as writer:
+    base_name = f"v{int(params.total_project_value)}_n{params.n_simulations}"
+    excel_filename = f"results/simulation_results_{base_name}.xlsx"
+    with pd.ExcelWriter(excel_filename, engine='openpyxl') as writer:
         # Sheet 1: Summary
         df.to_excel(writer, sheet_name='Summary', index=False)
         
@@ -247,12 +256,12 @@ def export_results_to_excel(df, all_results):
         reductions = []
         for market_key in MARKET_SCENARIOS.keys():
             market_label = MARKET_SCENARIOS[market_key]['label']
-            trad_var = df[(df['Market'] == market_label) & (df['STO_Ratio'] == 'Trad PF')]['Financial_VaR95'].values[0]
+            trad_var = _safe_financial_var(df, market_label, 'Trad PF')
             
             for sto_label in STO_LABELS[1:]:
-                sto_var = df[(df['Market'] == market_label) & (df['STO_Ratio'] == sto_label)]['Financial_VaR95'].values[0]
+                sto_var = _safe_financial_var(df, market_label, sto_label)
                 reduction_abs = trad_var - sto_var
-                reduction_pct = (trad_var - sto_var) / trad_var * 100
+                reduction_pct = (trad_var - sto_var) / trad_var * 100 if trad_var != 0 else 0
                 
                 reductions.append({
                     'Market': market_label,
@@ -283,8 +292,26 @@ def export_results_to_excel(df, all_results):
         
         df_retail = pd.DataFrame(retail_data)
         df_retail.to_excel(writer, sheet_name='Retail_Risk', index=False)
+
+        dist_records = []
+        for scenario_name, result in all_results.items():
+            ratio = result['sto_label']
+            market = result['market_label']
+            for dist_type in ['systemic', 'retail', 'extended']:
+                percentiles = result['metrics'].get(f'{dist_type}_percentiles', {})
+                for pct, value in percentiles.items():
+                    dist_records.append({
+                        'Scenario': scenario_name,
+                        'Market': market,
+                        'STO_Ratio': ratio,
+                        'Type': dist_type,
+                        'Percentile': pct,
+                        'Value': value
+                    })
+        if dist_records:
+            pd.DataFrame(dist_records).to_excel(writer, sheet_name='Distribution', index=False)
     
-    print("✅ Results exported to: simulation_results_v1000.xlsx")
+    print(f"✅ Results exported to: {excel_filename}")
 
 
 def print_key_insights(df, all_results):
@@ -395,6 +422,15 @@ def print_key_insights(df, all_results):
       • Net benefit depends on how well retail exposure is protected
     """)
 
+    print("\n5. Distribution percentiles (sample):")
+    for market_key in ['Perfect', 'Extreme']:
+        scenario = f"Trad PF_{market_key}"
+        metrics = all_results.get(scenario, {}).get('metrics', {})
+        percentiles = metrics.get('systemic_percentiles', {})
+        p65 = percentiles.get(65, 0.0)
+        p95 = percentiles.get(95, 0.0)
+        print(f"   {market_key}: systemic p65={p65:,.0f}억, p95={p95:,.0f}억")
+
 
 def main():
     """메인 실행"""
@@ -407,32 +443,30 @@ def main():
     print("="*80)
     
     # Run all scenarios
-    all_results = run_all_scenarios()
+    parser = argparse.ArgumentParser(description="Run PF scenarios")
+    parser.add_argument("--n-simulations", "-n", type=int, default=50000, help="per-scenario MC trials")
+    args = parser.parse_args()
+
+    all_results, params = run_all_scenarios(args.n_simulations)
     
     # Create summary table
     df = create_summary_table(all_results)
     
-    # Visualization
-    create_comprehensive_visualization(
-        all_results,
-        df,
-        STO_LABELS,
-        MARKET_SCENARIOS,
-        REFERENCE_STO_LABEL
-    )
-    
     # Export to Excel
-    export_results_to_excel(df, all_results)
+    export_results_to_excel(df, all_results, params)
     
     # Print insights
     print_key_insights(df, all_results)
     
     print("\n" + "="*80)
+    
     print("✅ COMPREHENSIVE ANALYSIS COMPLETE!")
     print("="*80)
     print("\nOutput files:")
-    print("  1. comprehensive_analysis_v1000.png")
-    print("  2. simulation_results_v1000.xlsx")
+
+    print(f"  1. simulation_results_v{int(params.total_project_value)}_n{params.n_simulations}.xlsx")
+    print("  (시각화는 final_visualization.py에서 생성)")
+    
 
 
 if __name__ == "__main__":
