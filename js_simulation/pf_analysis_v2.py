@@ -132,11 +132,24 @@ class ImprovedRiskAnalyzer:
         
         # STO 추가 지표
         if 'retail_loss' in losses:
-            # 개인 투자자 손실 (최종 시점 기준)
-            retail_total = losses['retail_loss'][:, :, -1].sum(axis=1)  # (n_sim,) 시뮬레이션별 총 손실
+            def get_percentiles(arr):
+                percentiles = [0, 5, 25, 50, 75, 95, 99]
+                return {p: np.percentile(arr, p) for p in percentiles}
+
+            systemic_percentiles = get_percentiles(cumulative_systemic)
+            self.metrics['systemic_percentiles'] = systemic_percentiles
+
+            retail_total = losses['retail_loss'][:, :, -1].sum(axis=1)
             retail_metrics = self.calculate_var_es(retail_total)
             retail_metrics = {f'retail_{k}': v for k, v in retail_metrics.items()}
             self.metrics.update(retail_metrics)
+            self.metrics['retail_percentiles'] = get_percentiles(retail_total)
+
+            extended_total = losses['systemic_loss_extended'][:, -1]
+            extended_metrics = self.calculate_var_es(extended_total)
+            extended_metrics = {f'extended_{k}': v for k, v in extended_metrics.items()}
+            self.metrics.update(extended_metrics)
+            self.metrics['extended_percentiles'] = get_percentiles(extended_total)
             
             # 확장 시스템 손실 (최종 시점 기준)
             extended_total = losses['systemic_loss_extended'][:, -1]  # 마지막 시점만!
